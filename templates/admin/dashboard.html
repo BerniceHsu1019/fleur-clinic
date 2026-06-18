@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>診所管理後台 ｜ Fleur 小兒科診所</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>[x-cloak]{display:none!important}</style>
+</head>
+<body class="min-h-screen bg-gray-100 font-sans text-gray-800">
+
+<!-- Sidebar + Content layout -->
+<div class="flex min-h-screen" x-data="adminApp()" x-cloak>
+
+  <!-- Sidebar -->
+  <aside class="w-56 bg-teal-800 text-white flex-shrink-0 flex flex-col">
+    <div class="px-5 py-5 border-b border-teal-700">
+      <div class="font-bold text-lg">Fleur 診所</div>
+      <div class="text-xs text-teal-300">管理後台</div>
+    </div>
+    <nav class="flex-1 p-3 space-y-1 text-sm">
+      <button @click="view = 'schedule'" class="w-full text-left px-3 py-2 rounded-lg hover:bg-teal-700 transition-colors"
+              :class="view === 'schedule' ? 'bg-teal-700 font-semibold' : ''">
+        📅 今日排診
+      </button>
+      <button @click="view = 'list'; loadList()" class="w-full text-left px-3 py-2 rounded-lg hover:bg-teal-700 transition-colors"
+              :class="view === 'list' ? 'bg-teal-700 font-semibold' : ''">
+        📋 掛號列表
+      </button>
+    </nav>
+    <div class="p-4 border-t border-teal-700 text-xs text-teal-400">
+      <a href="/" class="hover:text-white">← 返回診所首頁</a>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <div class="flex-1 flex flex-col overflow-auto">
+
+    <!-- Top bar -->
+    <header class="bg-white shadow-sm px-6 py-4 flex items-center gap-4 flex-wrap">
+      <h1 class="text-lg font-bold text-gray-700 mr-auto"
+          x-text="view === 'schedule' ? '今日排診一覽' : '掛號列表'"></h1>
+
+      <!-- Date picker -->
+      <div class="flex items-center gap-2">
+        <button @click="prevDay" class="p-1.5 rounded hover:bg-gray-100">‹</button>
+        <input type="date" x-model="selectedDate" @change="refresh()"
+               class="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" />
+        <button @click="nextDay" class="p-1.5 rounded hover:bg-gray-100">›</button>
+        <button @click="today" class="text-xs text-teal-600 hover:underline px-2">今天</button>
+      </div>
+
+      <!-- Doctor filter (list view) -->
+      <div x-show="view === 'list'" class="flex items-center gap-2">
+        <select x-model="filterDoctor" @change="loadList()"
+                class="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+          <option value="">所有醫師</option>
+          <template x-for="d in doctors" :key="d.id">
+            <option :value="d.id" x-text="d.name"></option>
+          </template>
+        </select>
+        <select x-model="filterStatus" @change="loadList()"
+                class="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+          <option value="">所有狀態</option>
+          <option value="CONFIRMED">已確認</option>
+          <option value="COMPLETED">已完診</option>
+          <option value="NO_SHOW">未到診</option>
+          <option value="CANCELLED">已取消</option>
+        </select>
+      </div>
+
+      <button @click="refresh()" class="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors">
+        重新整理
+      </button>
+    </header>
+
+    <!-- Loading -->
+    <div x-show="loading" class="flex-1 flex items-center justify-center text-gray-400 text-sm py-20">
+      載入中…
+    </div>
+
+    <!-- ══════════ SCHEDULE VIEW ══════════ -->
+    <div x-show="!loading && view === 'schedule'" class="p-6 space-y-6">
+      <div x-show="schedule.sessions && schedule.sessions.length === 0"
+           class="bg-white rounded-xl border border-gray-200 p-10 text-center text-gray-400">
+        今日無排診
+      </div>
+      <template x-for="s in schedule.sessions" :key="s.session_id">
+        <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <!-- Session header -->
+          <div class="flex items-center justify-between px-5 py-3 bg-gray-50 border-b border-gray-100">
+            <div class="flex items-center gap-3">
+              <span class="text-lg font-bold text-gray-800" x-text="s.doctor_name"></span>
+              <span class="text-xs text-gray-500" x-text="s.doctor_title"></span>
+              <span class="text-xs px-2 py-0.5 rounded-full font-medium"
+                    :class="s.session_type === 'NHI' ? 'bg-blue-100 text-blue-700' : 'bg-teal-100 text-teal-700'"
+                    x-text="s.session_type === 'NHI' ? '健保' : '自費'"></span>
+            </div>
+            <div class="text-sm text-gray-500">
+              <span x-text="s.start_time + ' – ' + s.end_time"></span>
+              <span class="ml-3 font-semibold text-gray-700"
+                    x-text="s.booked + (s.capacity ? ' / ' + s.capacity : '') + ' 位'"></span>
+            </div>
+          </div>
+
+          <!-- Appointment rows -->
+          <div x-show="s.appointments.length === 0" class="px-5 py-4 text-sm text-gray-400">尚無掛號</div>
+          <table x-show="s.appointments.length > 0" class="w-full text-sm">
+            <thead class="text-xs text-gray-400 border-b border-gray-100">
+              <tr>
+                <th class="text-left px-5 py-2 font-normal w-16">號碼/時段</th>
+                <th class="text-left px-3 py-2 font-normal">病患</th>
+                <th class="text-left px-3 py-2 font-normal hidden sm:table-cell">類型</th>
+                <th class="text-left px-3 py-2 font-normal hidden sm:table-cell">聯絡電話</th>
+                <th class="text-left px-3 py-2 font-normal">狀態</th>
+                <th class="text-left px-3 py-2 font-normal">操作</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+              <template x-for="a in s.appointments" :key="a.id">
+                <tr class="hover:bg-gray-50">
+                  <td class="px-5 py-3">
+                    <span x-show="a.queue_number" class="text-xl font-bold text-teal-700" x-text="a.queue_number"></span>
+                    <span x-show="!a.queue_number" class="text-sm font-medium text-teal-700" x-text="a.start_time"></span>
+                  </td>
+                  <td class="px-3 py-3">
+                    <div class="font-medium" x-text="a.patient_name"></div>
+                    <div x-show="a.guardian_name" class="text-xs text-gray-400" x-text="'家長：' + a.guardian_name"></div>
+                  </td>
+                  <td class="px-3 py-3 hidden sm:table-cell">
+                    <span class="text-xs" x-text="a.appointment_type_label"></span>
+                    <span x-show="a.visit_type" class="text-xs text-gray-400 ml-1"
+                          x-text="a.visit_type === 'FIRST' ? '(初診)' : '(複診)'"></span>
+                  </td>
+                  <td class="px-3 py-3 hidden sm:table-cell text-gray-500 text-xs" x-text="a.phone"></td>
+                  <td class="px-3 py-3">
+                    <select @change="updateStatus(a.id, $event.target.value)"
+                            class="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none"
+                            :class="{
+                              'text-green-700 bg-green-50': a.status === 'CONFIRMED',
+                              'text-blue-700 bg-blue-50': a.status === 'COMPLETED',
+                              'text-orange-700 bg-orange-50': a.status === 'NO_SHOW',
+                              'text-red-500 bg-red-50': a.status === 'CANCELLED',
+                            }">
+                      <option value="CONFIRMED"  :selected="a.status==='CONFIRMED'">已確認</option>
+                      <option value="COMPLETED"  :selected="a.status==='COMPLETED'">已完診</option>
+                      <option value="NO_SHOW"    :selected="a.status==='NO_SHOW'">未到診</option>
+                      <option value="CANCELLED"  :selected="a.status==='CANCELLED'">已取消</option>
+                    </select>
+                  </td>
+                  <td class="px-3 py-3">
+                    <button @click="showDetail(a)" class="text-xs text-teal-600 hover:underline">詳情</button>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </template>
+    </div>
+
+    <!-- ══════════ LIST VIEW ══════════ -->
+    <div x-show="!loading && view === 'list'" class="p-6">
+      <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div x-show="listAppointments.length === 0" class="px-5 py-10 text-center text-gray-400">
+          此日期無掛號記錄
+        </div>
+        <table x-show="listAppointments.length > 0" class="w-full text-sm">
+          <thead class="text-xs text-gray-400 border-b border-gray-200 bg-gray-50">
+            <tr>
+              <th class="text-left px-5 py-3 font-normal">號碼/時段</th>
+              <th class="text-left px-3 py-3 font-normal">醫師</th>
+              <th class="text-left px-3 py-3 font-normal">病患</th>
+              <th class="text-left px-3 py-3 font-normal hidden md:table-cell">類型</th>
+              <th class="text-left px-3 py-3 font-normal hidden md:table-cell">電話</th>
+              <th class="text-left px-3 py-3 font-normal">狀態</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <template x-for="a in listAppointments" :key="a.id">
+              <tr class="hover:bg-gray-50 cursor-pointer" @click="showDetail(a)">
+                <td class="px-5 py-3 font-bold text-teal-700">
+                  <span x-show="a.queue_number" x-text="a.queue_number + ' 號'"></span>
+                  <span x-show="!a.queue_number" x-text="a.start_time + ' – ' + a.end_time"></span>
+                </td>
+                <td class="px-3 py-3" x-text="a.doctor_name"></td>
+                <td class="px-3 py-3">
+                  <div x-text="a.patient_name"></div>
+                  <div x-show="a.guardian_name" class="text-xs text-gray-400" x-text="a.guardian_name"></div>
+                </td>
+                <td class="px-3 py-3 hidden md:table-cell text-xs" x-text="a.appointment_type_label"></td>
+                <td class="px-3 py-3 hidden md:table-cell text-xs text-gray-500" x-text="a.phone"></td>
+                <td class="px-3 py-3">
+                  <span class="text-xs px-2 py-1 rounded-full font-medium"
+                        :class="{
+                          'bg-green-100 text-green-700': a.status === 'CONFIRMED',
+                          'bg-blue-100 text-blue-700': a.status === 'COMPLETED',
+                          'bg-orange-100 text-orange-700': a.status === 'NO_SHOW',
+                          'bg-red-100 text-red-500': a.status === 'CANCELLED',
+                        }"
+                        x-text="a.status_label"></span>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- end main content -->
+</div><!-- end flex -->
+
+<!-- Detail Modal -->
+<div x-data="adminApp()" style="display:none"></div>
+<div id="modalRoot"></div>
+
+<script>
+function adminApp() {
+  return {
+    view: 'schedule',
+    loading: false,
+    selectedDate: new Date().toISOString().split('T')[0],
+    schedule: { sessions: [] },
+    listAppointments: [],
+    doctors: [],
+    filterDoctor: '',
+    filterStatus: '',
+    detailAppt: null,
+
+    async init() {
+      await this.loadDoctors();
+      await this.loadSchedule();
+    },
+
+    async loadDoctors() {
+      const res = await fetch('/api/admin/doctors');
+      this.doctors = await res.json();
+    },
+
+    async loadSchedule() {
+      this.loading = true;
+      const res = await fetch(`/api/admin/schedule?target_date=${this.selectedDate}`);
+      this.schedule = await res.json();
+      this.loading = false;
+    },
+
+    async loadList() {
+      this.loading = true;
+      let url = `/api/admin/appointments?target_date=${this.selectedDate}`;
+      if (this.filterDoctor) url += `&doctor_id=${this.filterDoctor}`;
+      if (this.filterStatus) url += `&status=${this.filterStatus}`;
+      const res = await fetch(url);
+      this.listAppointments = await res.json();
+      this.loading = false;
+    },
+
+    async refresh() {
+      if (this.view === 'schedule') await this.loadSchedule();
+      else await this.loadList();
+    },
+
+    async updateStatus(id, status) {
+      await fetch(`/api/admin/appointments/${id}/status?status=${status}`, { method: 'PUT' });
+      await this.loadSchedule();
+    },
+
+    prevDay() {
+      const d = new Date(this.selectedDate + 'T00:00:00');
+      d.setDate(d.getDate() - 1);
+      this.selectedDate = d.toISOString().split('T')[0];
+      this.refresh();
+    },
+
+    nextDay() {
+      const d = new Date(this.selectedDate + 'T00:00:00');
+      d.setDate(d.getDate() + 1);
+      this.selectedDate = d.toISOString().split('T')[0];
+      this.refresh();
+    },
+
+    today() {
+      this.selectedDate = new Date().toISOString().split('T')[0];
+      this.refresh();
+    },
+
+    showDetail(a) {
+      alert(
+        `【掛號詳情】\n病患：${a.patient_name}\n電話：${a.phone}\n醫師：${a.doctor_name}\n類型：${a.appointment_type_label}\n` +
+        (a.queue_number ? `號碼：${a.queue_number}\n` : `時段：${a.start_time} – ${a.end_time}\n`) +
+        (a.notes ? `備註：${a.notes}\n` : '') +
+        (a.his_id ? `HIS ID：${a.his_id}` : '')
+      );
+    },
+  };
+}
+</script>
+</body>
+</html>

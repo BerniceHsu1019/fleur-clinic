@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+{% block title %}健保當日取號 ｜ Fleur 小兒科診所{% endblock %}
+{% block content %}
+
+<div x-data="nhiQueueApp()" x-cloak>
+
+  <div class="max-w-lg mx-auto">
+
+    <!-- Header -->
+    <h1 class="text-2xl font-bold text-center text-gray-700 mb-1">健保門診當日線上取號</h1>
+    <p class="text-center text-sm text-gray-400 mb-6" x-text="todayLabel"></p>
+
+    <!-- Notice -->
+    <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-5 text-xs text-amber-700 flex gap-2">
+      <span class="flex-shrink-0">⚠️</span>
+      <div>
+        <b>注意事項</b><br>
+        • 健保取號不分醫師，每人每診次限取 1 號<br>
+        • 門診結束前 <b>10 分鐘</b>停止取號，請儘早取號<br>
+        • 過號規則：叫號時不在場者，需等 <b>3 位病患</b>後補叫
+      </div>
+    </div>
+
+    <!-- Loading -->
+    <div x-show="loading" class="text-center text-gray-400 py-10">載入中…</div>
+
+    <!-- No sessions today -->
+    <div x-show="!loading && sessions.length === 0"
+         class="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400 text-sm">
+      今日無健保門診
+    </div>
+
+    <!-- === STEP 1: Session selection === -->
+    <div x-show="!loading && !confirmation && sessions.length > 0">
+
+      <div class="text-sm font-semibold text-gray-700 mb-3">選擇診次</div>
+
+      <div class="space-y-2 mb-5">
+        <template x-for="s in sessions" :key="s.period_start">
+          <div class="bg-white rounded-xl border-2 transition-all overflow-hidden"
+               :class="selectedSession?.period_start === s.period_start
+                 ? 'border-teal-500'
+                 : s.is_open ? 'border-gray-200 hover:border-gray-300' : 'border-gray-100 opacity-60'">
+
+            <div class="flex items-center gap-3 px-4 py-3">
+              <!-- Period icon -->
+              <div class="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-lg flex-shrink-0">🏥</div>
+              <!-- Info -->
+              <div class="flex-1 min-w-0">
+                <div class="font-medium text-gray-800 text-sm" x-text="s.label"></div>
+                <div class="text-xs text-gray-500" x-text="s.period_start + ' – ' + s.period_end"></div>
+                <div x-show="s.is_open" class="text-xs text-gray-400 mt-0.5"
+                     x-text="'最晚 ' + s.cutoff_time + ' 前取號'"></div>
+              </div>
+              <!-- Queue badge -->
+              <div class="text-right flex-shrink-0 mr-1">
+                <div class="text-sm font-bold"
+                     :class="s.is_open ? 'text-teal-700' : 'text-gray-400'"
+                     x-text="s.current_queue + ' 號'"></div>
+                <div class="text-xs"
+                     :class="s.is_ended ? 'text-red-400' : s.is_past_cutoff ? 'text-orange-500' : s.is_full ? 'text-orange-500' : 'text-gray-400'"
+                     x-text="s.is_ended ? '已結束' : s.is_past_cutoff ? '截止取號' : s.is_full ? '已滿號' : '目前'"></div>
+              </div>
+              <!-- Take number button -->
+              <button x-show="s.is_open"
+                      @click="selectSession(s)"
+                      class="ml-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex-shrink-0"
+                      :class="selectedSession?.period_start === s.period_start
+                        ? 'bg-teal-600 text-white'
+                        : 'bg-teal-50 text-teal-700 hover:bg-teal-100'">
+                取號
+              </button>
+              <div x-show="!s.is_open"
+                   class="ml-1 px-4 py-2 rounded-lg text-sm font-medium text-gray-300 flex-shrink-0"
+                   x-text="s.is_ended ? '已結束' : s.is_past_cutoff ? '截止取號' : '已滿號'"></div>
+            </div>
+
+          </div>
+        </template>
+      </div>
+
+      <!-- === STEP 2: Patient form (slides in when session selected) === -->
+      <div x-show="selectedSession" class="bg-white rounded-2xl border border-teal-200 p-5">
+        <div class="font-semibold text-gray-700 mb-4 text-sm">
+          填寫資料 ─
+          <span class="text-teal-700" x-text="selectedSession?.label"></span>
+          <span class="text-gray-400 font-normal ml-1"
+                x-text="selectedSession?.period_start + ' – ' + selectedSession?.period_end"></span>
+        </div>
+
+        <form @submit.prevent="submitQueue" class="space-y-3">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">家長／監護人姓名 <span class="text-red-500">*</span></label>
+              <input type="text" x-model="form.name" required
+                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+                     placeholder="請輸入姓名" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">聯絡電話 <span class="text-red-500">*</span></label>
+              <input type="tel" x-model="form.phone" required
+                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+                     placeholder="0912-345-678" />
+            </div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">就診者姓名</label>
+              <input type="text" x-model="form.patientName"
+                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+                     placeholder="若與家長同名可留空" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">健保卡號</label>
+              <input type="text" x-model="form.nhiNumber"
+                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+                     placeholder="選填" />
+            </div>
+          </div>
+
+          <div x-show="errorMsg"
+               class="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700"
+               x-text="errorMsg"></div>
+
+          <button type="submit" :disabled="submitting"
+                  class="w-full py-3 bg-teal-600 text-white rounded-xl font-semibold hover:bg-teal-700 transition-colors disabled:opacity-60 mt-2">
+            <span x-show="!submitting">確認取號</span>
+            <span x-show="submitting">處理中…</span>
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- === STEP 3: Confirmation === -->
+    <div x-show="confirmation" class="text-center">
+      <div class="text-5xl mb-4" x-text="confirmation?.already_registered ? '📋' : '✅'"></div>
+      <h2 class="text-2xl font-bold text-teal-800 mb-1"
+          x-text="confirmation?.already_registered ? '您已取號' : '取號成功！'"></h2>
+      <p class="text-gray-500 text-sm mb-6">請準時前往候診，攜帶健保卡</p>
+
+      <!-- Number card -->
+      <div class="bg-white border-2 border-teal-200 rounded-2xl p-6 shadow-sm mb-6">
+        <div class="text-7xl font-black text-teal-700 mb-1"
+             x-text="confirmation?.queue_number"></div>
+        <div class="text-sm text-gray-400 tracking-wide">您的候診號碼</div>
+
+        <div class="divide-y divide-gray-100 text-sm mt-5">
+          <div class="flex justify-between py-2.5">
+            <span class="text-gray-400">診次</span>
+            <span class="font-medium" x-text="confirmation?.label + '　' + confirmation?.start_time + ' – ' + confirmation?.end_time"></span>
+          </div>
+          <div class="flex justify-between py-2.5">
+            <span class="text-gray-400">日期</span>
+            <span class="font-medium" x-text="formatDate(confirmation?.date)"></span>
+          </div>
+        </div>
+
+        <!-- Queue rule reminder -->
+        <div class="mt-4 bg-amber-50 rounded-xl px-3 py-2.5 text-xs text-amber-700 text-left">
+          ⚠️ <b>過號提醒</b>：叫號時若不在場，需等 <b>3 位病患</b>後補叫
+        </div>
+      </div>
+
+      <div class="flex flex-col sm:flex-row gap-3 justify-center">
+        <a href="/lookup"
+           class="px-6 py-2.5 border-2 border-teal-500 text-teal-700 rounded-xl font-medium hover:bg-teal-50 transition-colors text-sm">
+          查詢我的掛號
+        </a>
+        <button @click="reset()"
+                class="px-6 py-2.5 bg-teal-600 text-white rounded-xl font-medium hover:bg-teal-700 transition-colors text-sm">
+          重新取號
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+function nhiQueueApp() {
+  return {
+    loading: true,
+    sessions: [],
+    selectedSession: null,
+    form: { name: '', phone: '', patientName: '', nhiNumber: '' },
+    errorMsg: '',
+    submitting: false,
+    confirmation: null,
+    todayLabel: '',
+
+    async init() {
+      const d = new Date();
+      const days = ['日', '一', '二', '三', '四', '五', '六'];
+      this.todayLabel = `${d.getFullYear()} 年 ${d.getMonth()+1} 月 ${d.getDate()} 日（週${days[d.getDay()]}）`;
+      await this.loadSessions();
+    },
+
+    async loadSessions() {
+      this.loading = true;
+      const res = await fetch('/api/nhi-queue/sessions');
+      const data = await res.json();
+      this.sessions = data.sessions;
+      this.loading = false;
+    },
+
+    selectSession(s) {
+      this.selectedSession = this.selectedSession?.period_start === s.period_start ? null : s;
+      this.errorMsg = '';
+    },
+
+    async submitQueue() {
+      this.errorMsg = '';
+      this.submitting = true;
+      try {
+        const res = await fetch('/api/nhi-queue/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            period_start: this.selectedSession.period_start,
+            name: this.form.name,
+            phone: this.form.phone,
+            patient_name: this.form.patientName || null,
+            nhi_number: this.form.nhiNumber || null,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          this.errorMsg = data.detail || '取號失敗，請重試';
+        } else {
+          this.confirmation = data;
+        }
+      } catch {
+        this.errorMsg = '網路錯誤，請稍後再試';
+      } finally {
+        this.submitting = false;
+      }
+    },
+
+    formatDate(iso) {
+      if (!iso) return '';
+      const dt = new Date(iso + 'T00:00:00');
+      const days = ['日', '一', '二', '三', '四', '五', '六'];
+      return `${dt.getMonth()+1} 月 ${dt.getDate()} 日（週${days[dt.getDay()]}）`;
+    },
+
+    reset() {
+      this.confirmation = null;
+      this.selectedSession = null;
+      this.form = { name: '', phone: '', patientName: '', nhiNumber: '' };
+      this.loadSessions();
+    },
+  };
+}
+</script>
+{% endblock %}

@@ -1,0 +1,13 @@
+# Database (Railway uses ephemeral storage; seed.py recreates on deploy)
+clinic.db
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# OS
+.DS_Store

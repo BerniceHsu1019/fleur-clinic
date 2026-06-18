@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Fleur 小兒科診所{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+    .step-active   { @apply bg-teal-600 text-white; }
+    .step-done     { @apply bg-teal-200 text-teal-800; }
+    .step-pending  { @apply bg-gray-200 text-gray-500; }
+  </style>
+</head>
+<body class="min-h-screen bg-gray-50 font-sans text-gray-800">
+
+  <!-- Header -->
+  <header class="bg-white shadow-sm">
+    <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+      <a href="/" class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-full bg-teal-600 flex items-center justify-center text-white font-bold text-lg">F</div>
+        <div>
+          <div class="font-bold text-teal-800 leading-tight">Fleur 小兒科診所</div>
+          <div class="text-xs text-gray-500">線上掛號系統</div>
+        </div>
+      </a>
+      <nav class="flex gap-4 text-sm">
+        <a href="/" class="text-gray-600 hover:text-teal-700">首頁</a>
+        <a href="/lookup" class="text-gray-600 hover:text-teal-700">查詢掛號</a>
+        <a href="/admin" class="text-gray-500 hover:text-teal-700">診所管理</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Content -->
+  <main class="max-w-4xl mx-auto px-4 py-8">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Footer -->
+  <footer class="text-center text-xs text-gray-400 py-6 mt-12 border-t border-gray-100">
+    <p>桃園市中路特區 吉安一街70號 ｜ 03-2150-755 ｜ fleur.clinic@msa.hinet.net</p>
+    <p class="mt-1">© 2025 Fleur 小兒科診所</p>
+  </footer>
+
+</body>
+</html>

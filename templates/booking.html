@@ -1,0 +1,523 @@
+{% extends "base.html" %}
+{% block title %}自費門診預約 ｜ Fleur 小兒科診所{% endblock %}
+{% block content %}
+
+<div x-data="bookingApp()" x-cloak>
+
+  <!-- Step Indicator -->
+  <div class="flex items-center justify-center mb-8 gap-1">
+    <template x-for="(label, i) in steps" :key="i">
+      <div class="flex items-center gap-1">
+        <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all"
+             :class="i+1 < step ? 'bg-teal-100 text-teal-700'
+                    : i+1 === step ? 'bg-teal-600 text-white'
+                    : 'bg-gray-100 text-gray-400'">
+          <span x-show="i+1 < step" class="text-xs">✓</span>
+          <span x-show="i+1 >= step" x-text="i+1"
+                class="text-xs w-4 h-4 rounded-full flex items-center justify-center"
+                :class="i+1 === step ? 'bg-teal-500' : 'bg-gray-300 text-gray-500'"></span>
+          <span x-text="label"></span>
+        </div>
+        <div x-show="i < steps.length - 1" class="w-5 h-px bg-gray-300"></div>
+      </div>
+    </template>
+  </div>
+
+  <!-- ───── STEP 1: 選擇專科 ───── -->
+  <div x-show="step === 1">
+    <h2 class="text-xl font-bold text-center text-gray-700 mb-2">選擇自費專科門診</h2>
+    <p class="text-center text-sm text-gray-400 mb-6">初診 20 分鐘 ／ 複診 10 分鐘</p>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-5 max-w-xl mx-auto">
+
+      <button @click="selectService('GROWTH')"
+              class="group border-2 rounded-2xl p-7 text-left hover:border-green-500 hover:bg-green-50 transition-all"
+              :class="serviceType==='GROWTH' ? 'border-green-500 bg-green-50' : 'border-gray-200 bg-white'">
+        <div class="text-4xl mb-3">🌱</div>
+        <div class="font-bold text-lg text-green-800 mb-1">生長發育</div>
+        <ul class="text-xs text-gray-500 space-y-0.5">
+          <li>• 身高評估與生長曲線追蹤</li>
+          <li>• 性早熟、矮小症</li>
+          <li>• 肥胖體重管理</li>
+        </ul>
+      </button>
+
+      <button @click="selectService('MENTAL')"
+              class="group border-2 rounded-2xl p-7 text-left hover:border-indigo-500 hover:bg-indigo-50 transition-all"
+              :class="serviceType==='MENTAL' ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 bg-white'">
+        <div class="text-4xl mb-3">🧠</div>
+        <div class="font-bold text-lg text-indigo-800 mb-1">兒童心智發展</div>
+        <ul class="text-xs text-gray-500 space-y-0.5">
+          <li>• 注意力不足、過動症（ADHD）</li>
+          <li>• 自閉症類群、社交發展</li>
+          <li>• 焦慮、情緒與睡眠問題</li>
+        </ul>
+      </button>
+
+    </div>
+
+    <!-- NHI info box -->
+    <div class="mt-8 max-w-xl mx-auto bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm">
+      <div class="flex gap-2 items-start">
+        <span class="text-xl">🏥</span>
+        <div>
+          <div class="font-semibold text-blue-800 mb-1">健保門診（不需網路預約）</div>
+          <p class="text-blue-700 text-xs leading-relaxed">
+            健保門診採現場取號制，請攜帶健保卡直接至診所掛號台領取號碼牌。<br>
+            早診、午診、晚診各自從第 <b>1 號</b>開始。<br>
+            ⚠️ <b>過號規則</b>：叫號時不在場者，需再等 <b>3 位病患</b>後方可補叫。
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───── STEP 2: 選擇醫師 ───── -->
+  <div x-show="step === 2">
+    <button @click="step = 1" class="text-sm text-teal-600 mb-4 flex items-center gap-1">← 返回</button>
+    <h2 class="text-xl font-bold text-center text-gray-700 mb-1">選擇醫師</h2>
+    <p class="text-center text-sm text-gray-400 mb-6"
+       x-text="serviceType === 'GROWTH' ? '生長發育門診' : '兒童心智發展門診'"></p>
+    <div x-show="loading" class="text-center text-gray-400 py-10">載入中…</div>
+    <div x-show="!loading" class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl mx-auto">
+      <template x-for="d in doctors" :key="d.id">
+        <button @click="selectDoctor(d)"
+                class="border-2 rounded-2xl p-5 text-left hover:border-teal-500 hover:bg-teal-50 transition-all"
+                :class="selectedDoctor && selectedDoctor.id === d.id ? 'border-teal-500 bg-teal-50' : 'border-gray-200 bg-white'">
+          <div class="flex items-center gap-3">
+            <div class="w-11 h-11 rounded-full bg-teal-100 flex items-center justify-center text-teal-700 font-bold text-lg"
+                 x-text="d.name[0]"></div>
+            <div>
+              <div class="font-bold text-gray-800" x-text="d.name + ' ' + d.title"></div>
+              <div class="text-xs text-gray-500 mt-0.5" x-text="d.specialty"></div>
+            </div>
+          </div>
+        </button>
+      </template>
+    </div>
+  </div>
+
+  <!-- ───── STEP 3: 初複診 + 日曆 ───── -->
+  <div x-show="step === 3">
+    <button @click="step = 2" class="text-sm text-teal-600 mb-4 flex items-center gap-1">← 返回</button>
+
+    <!-- Visit type selector -->
+    <div class="max-w-2xl mx-auto mb-5">
+      <div class="text-sm font-semibold text-gray-700 mb-2">請選擇初診或複診</div>
+      <div class="flex gap-3">
+        <button @click="selectVisitType('FIRST')"
+                class="flex-1 py-3 rounded-xl border-2 text-sm font-medium transition-all"
+                :class="visitType==='FIRST' ? 'border-teal-500 bg-teal-50 text-teal-800' : 'border-gray-200 text-gray-600 hover:border-gray-300'">
+          初診
+          <span class="text-xs font-normal text-gray-400 ml-1">（20 分鐘）</span>
+        </button>
+        <button @click="selectVisitType('RETURN')"
+                class="flex-1 py-3 rounded-xl border-2 text-sm font-medium transition-all"
+                :class="visitType==='RETURN' ? 'border-teal-500 bg-teal-50 text-teal-800' : 'border-gray-200 text-gray-600 hover:border-gray-300'">
+          複診
+          <span class="text-xs font-normal text-gray-400 ml-1">（10 分鐘）</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Calendar (appears after visit type is selected) -->
+    <div x-show="visitType" class="max-w-2xl mx-auto">
+      <div class="flex items-center justify-between mb-3">
+        <span class="text-sm font-semibold text-gray-700">選擇看診日期</span>
+        <div x-show="loading" class="text-xs text-gray-400">查詢中…</div>
+      </div>
+
+      <!-- 3-month calendar grid -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+        <template x-for="cal in calendarMonths" :key="cal.label">
+          <div class="bg-white rounded-xl border border-gray-200 p-3">
+            <div class="text-center font-semibold text-gray-700 text-sm mb-2" x-text="cal.label"></div>
+            <!-- Day headers -->
+            <div class="grid grid-cols-7 mb-1">
+              <template x-for="h in ['一','二','三','四','五','六','日']" :key="h">
+                <div class="text-center text-xs text-gray-400 py-0.5" x-text="h"></div>
+              </template>
+            </div>
+            <!-- Day cells -->
+            <div class="grid grid-cols-7 gap-0.5">
+              <template x-for="(day, idx) in cal.days" :key="idx">
+                <div>
+                  <!-- Empty padding cell -->
+                  <div x-show="!day" class="h-7"></div>
+
+                  <!-- Past or no-slot day -->
+                  <div x-show="day && (day.isPast || !availableDateSet.has(day.iso))"
+                       class="h-7 flex items-center justify-center rounded text-xs"
+                       :class="day && day.isToday ? 'border border-gray-200 text-gray-400' : 'text-gray-300'">
+                    <span x-text="day?.day"></span>
+                  </div>
+
+                  <!-- Bookable day -->
+                  <button x-show="day && !day.isPast && availableDateSet.has(day.iso)"
+                          @click="clickDate(day.iso)"
+                          class="h-7 w-full flex items-center justify-center rounded text-xs font-medium transition-colors"
+                          :class="selectedDate === day.iso
+                            ? 'bg-teal-600 text-white'
+                            : 'bg-teal-50 text-teal-700 hover:bg-teal-100'">
+                    <span x-text="day.day"></span>
+                  </button>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- No dates notice -->
+      <div x-show="!loading && availableDates.length === 0 && visitType"
+           class="text-center text-gray-400 py-6 bg-white rounded-xl border border-gray-100 text-sm">
+        未來三個月內無可預約時段
+      </div>
+
+      <!-- Time slots panel (shown when date is selected) -->
+      <div x-show="selectedDate && dayBlocks.length > 0"
+           class="bg-white rounded-xl border border-teal-200 p-4">
+        <div class="font-semibold text-gray-800 text-sm mb-3">
+          <span x-text="formatDateLong(selectedDate)"></span>
+          <span class="ml-2 text-xs font-normal text-gray-400"
+                x-text="visitType === 'FIRST' ? '初診（20 分鐘）' : '複診（10 分鐘）'"></span>
+        </div>
+
+        <template x-for="sess in dayBlocks" :key="sess.session_id">
+          <div class="mb-4 last:mb-0">
+            <div class="text-xs text-gray-400 mb-2"
+                 x-text="sess.label + '　' + sess.start_time + ' – ' + sess.end_time"></div>
+            <div class="flex flex-wrap gap-2">
+              <template x-for="block in sess.blocks" :key="block.block_start">
+                <button @click="selectBlock(sess.session_id, block)"
+                        class="px-4 py-2 rounded-lg border-2 text-sm transition-all text-left min-w-[5rem]"
+                        :class="selectedSessionId === sess.session_id && selectedBlockStart === block.block_start
+                          ? 'border-teal-600 bg-teal-600 text-white font-semibold'
+                          : 'border-teal-200 text-teal-700 hover:border-teal-400 bg-white'">
+                  <div class="font-semibold" x-text="block.block_start"></div>
+                  <div class="text-xs opacity-70 mt-0.5" x-text="blockSubtitle(block)"></div>
+                </button>
+              </template>
+            </div>
+          </div>
+        </template>
+
+        <div x-show="dayBlocks.length === 0 && !loading"
+             class="text-sm text-gray-400 py-3">此日期已無可用時段</div>
+      </div>
+
+      <!-- Prompt to pick a date -->
+      <div x-show="!selectedDate && availableDates.length > 0 && !loading"
+           class="text-center text-sm text-gray-400 mt-3">
+        ↑ 點選綠色日期查看可預約時段
+      </div>
+    </div>
+  </div>
+
+  <!-- ───── STEP 4: 填寫資料 ───── -->
+  <div x-show="step === 4">
+    <button @click="step = 3" class="text-sm text-teal-600 mb-4 flex items-center gap-1">← 返回</button>
+    <h2 class="text-xl font-bold text-center text-gray-700 mb-5">填寫基本資料</h2>
+
+    <!-- Appointment summary -->
+    <div class="max-w-lg mx-auto bg-teal-50 border border-teal-200 rounded-xl p-4 mb-5 text-sm">
+      <div class="font-semibold text-teal-800 mb-2">預約摘要</div>
+      <div class="grid grid-cols-2 gap-x-4 gap-y-1.5 text-gray-700">
+        <span class="text-gray-400">專科</span>
+        <span x-text="serviceType === 'GROWTH' ? '生長發育' : '兒童心智發展'"></span>
+        <span class="text-gray-400">醫師</span>
+        <span x-text="selectedDoctor?.name + ' ' + selectedDoctor?.title"></span>
+        <span class="text-gray-400">日期</span>
+        <span x-text="formatDateLong(selectedDate)"></span>
+        <span class="text-gray-400">時段</span>
+        <span x-text="selectedSlotInfo?.start + ' – ' + selectedSlotInfo?.end"></span>
+        <span class="text-gray-400">類型</span>
+        <span x-text="visitType === 'FIRST' ? '初診（20 分鐘）' : '複診（10 分鐘）'"></span>
+      </div>
+    </div>
+
+    <!-- Form -->
+    <form @submit.prevent="submitBooking" class="max-w-lg mx-auto bg-white rounded-2xl border border-gray-200 p-6 space-y-4">
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">家長／監護人姓名 <span class="text-red-500">*</span></label>
+          <input type="text" x-model="patient.name" required
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+                 placeholder="請輸入姓名" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">聯絡電話 <span class="text-red-500">*</span></label>
+          <input type="tel" x-model="patient.phone" required
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+                 placeholder="0912-345-678" />
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">就診者姓名</label>
+          <input type="text" x-model="patient.childName"
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+                 placeholder="若與家長同名可留空" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">就診者生日</label>
+          <input type="date" x-model="patient.dateOfBirth"
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" />
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">備註</label>
+        <textarea x-model="patient.notes" rows="2"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+                  placeholder="過敏史、特別告知事項、主訴症狀…"></textarea>
+      </div>
+
+      <div x-show="errorMsg"
+           class="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700"
+           x-text="errorMsg"></div>
+
+      <button type="submit" :disabled="submitting"
+              class="w-full py-3 bg-teal-600 text-white rounded-xl font-semibold hover:bg-teal-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
+        <span x-show="!submitting">確認預約</span>
+        <span x-show="submitting">處理中…</span>
+      </button>
+    </form>
+  </div>
+
+  <!-- ───── STEP 5: 完成 ───── -->
+  <div x-show="step === 5" class="text-center py-6 max-w-md mx-auto">
+    <div class="text-6xl mb-4">🎉</div>
+    <h2 class="text-2xl font-bold text-teal-800 mb-2">預約成功！</h2>
+    <p class="text-gray-500 text-sm mb-6">請準時到場，攜帶健保卡及相關資料</p>
+
+    <!-- Confirmation card -->
+    <div class="bg-white border-2 border-teal-200 rounded-2xl p-6 text-left shadow-sm mb-6">
+      <div class="text-center mb-4">
+        <div class="text-3xl font-bold text-teal-700"
+             x-text="confirmation?.start_time + ' – ' + confirmation?.end_time"></div>
+        <div class="text-xs text-gray-400 mt-1"
+             x-text="visitType === 'FIRST' ? '初診時段' : '複診時段'"></div>
+      </div>
+      <div class="divide-y divide-gray-100 text-sm">
+        <div class="flex justify-between py-2.5">
+          <span class="text-gray-400">醫師</span>
+          <span class="font-medium" x-text="confirmation?.doctor_name + ' ' + confirmation?.doctor_title"></span>
+        </div>
+        <div class="flex justify-between py-2.5">
+          <span class="text-gray-400">日期</span>
+          <span class="font-medium" x-text="formatDateLong(confirmation?.date)"></span>
+        </div>
+        <div class="flex justify-between py-2.5">
+          <span class="text-gray-400">病患</span>
+          <span class="font-medium" x-text="confirmation?.patient_name"></span>
+        </div>
+        <div x-show="confirmation?.his_id" class="flex justify-between py-2.5">
+          <span class="text-gray-400">掛號編號</span>
+          <span class="text-xs text-gray-500 font-mono" x-text="confirmation?.his_id"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex flex-col sm:flex-row gap-3 justify-center">
+      <a href="/lookup"
+         class="px-6 py-2.5 border-2 border-teal-500 text-teal-700 rounded-xl font-medium hover:bg-teal-50 transition-colors text-sm">
+        查詢我的預約
+      </a>
+      <button @click="reset()"
+              class="px-6 py-2.5 bg-teal-600 text-white rounded-xl font-medium hover:bg-teal-700 transition-colors text-sm">
+        繼續預約
+      </button>
+    </div>
+  </div>
+
+</div><!-- end x-data -->
+
+<script>
+function bookingApp() {
+  return {
+    step: 1,
+    steps: ['選擇專科', '選擇醫師', '選擇時段', '填寫資料'],
+
+    serviceType: null,
+    selectedDoctor: null,
+    visitType: null,
+    selectedDate: null,
+    selectedSessionId: null,
+    selectedBlockStart: null,
+    selectedSlotInfo: null,
+
+    doctors: [],
+    availableDates: [],
+    availableDateSet: new Set(),
+    calendarMonths: [],
+    dayBlocks: [],
+
+    patient: { name: '', phone: '', childName: '', dateOfBirth: '', notes: '' },
+    loading: false,
+    submitting: false,
+    errorMsg: '',
+    confirmation: null,
+
+    /* ── Service ── */
+    selectService(s) {
+      this.serviceType = s;
+      this.selectedDoctor = null;
+      this.doctors = [];
+      this.step = 2;
+      this.loadDoctors();
+    },
+
+    async loadDoctors() {
+      this.loading = true;
+      const res = await fetch(`/api/doctors?service=${this.serviceType}`);
+      this.doctors = await res.json();
+      this.loading = false;
+    },
+
+    /* ── Doctor ── */
+    selectDoctor(d) {
+      this.selectedDoctor = d;
+      this.visitType = null;
+      this.selectedDate = null;
+      this.selectedBlockStart = null;
+      this.availableDates = [];
+      this.availableDateSet = new Set();
+      this.dayBlocks = [];
+      this.step = 3;
+      this.buildCalendarMonths();
+    },
+
+    /* ── Calendar ── */
+    buildCalendarMonths() {
+      const today = new Date();
+      this.calendarMonths = [0, 1, 2].map(offset => {
+        const d = new Date(today.getFullYear(), today.getMonth() + offset, 1);
+        return this.buildMonth(d.getFullYear(), d.getMonth());
+      });
+    },
+
+    buildMonth(year, month) {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const firstDay = new Date(year, month, 1);
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const startOffset = (firstDay.getDay() + 6) % 7; // Mon = 0
+
+      const days = [];
+      for (let i = 0; i < startOffset; i++) days.push(null);
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dt = new Date(year, month, d);
+        const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        days.push({ day: d, iso, isPast: dt < today, isToday: dt.getTime() === today.getTime() });
+      }
+      while (days.length % 7 !== 0) days.push(null);
+      return { label: `${year} 年 ${month + 1} 月`, days };
+    },
+
+    /* ── Visit type ── */
+    async selectVisitType(vt) {
+      this.visitType = vt;
+      this.selectedDate = null;
+      this.selectedBlockStart = null;
+      this.selectedSessionId = null;
+      this.selectedSlotInfo = null;
+      this.dayBlocks = [];
+      await this.loadAvailableDates();
+    },
+
+    async loadAvailableDates() {
+      if (!this.selectedDoctor || !this.visitType) return;
+      this.loading = true;
+      const res = await fetch(
+        `/api/slots/dates?doctor_id=${this.selectedDoctor.id}&session_type=PRIVATE&visit_type=${this.visitType}`
+      );
+      const data = await res.json();
+      this.availableDates = data.map(d => d.date);
+      this.availableDateSet = new Set(this.availableDates);
+      this.loading = false;
+    },
+
+    async clickDate(iso) {
+      if (!this.availableDateSet.has(iso)) return;
+      this.selectedDate = iso;
+      this.selectedBlockStart = null;
+      this.selectedSessionId = null;
+      this.selectedSlotInfo = null;
+      this.loading = true;
+      const res = await fetch(
+        `/api/slots/day-blocks?doctor_id=${this.selectedDoctor.id}&date=${iso}&visit_type=${this.visitType}`
+      );
+      this.dayBlocks = await res.json();
+      this.loading = false;
+    },
+
+    selectBlock(sessionId, block) {
+      this.selectedSessionId = sessionId;
+      this.selectedBlockStart = block.block_start;
+      this.selectedSlotInfo = this.visitType === 'FIRST'
+        ? block.next_slot_first
+        : (block.next_slot_return || block.next_slot_first);
+      this.step = 4;
+    },
+
+    /* ── Form ── */
+    async submitBooking() {
+      this.errorMsg = '';
+      this.submitting = true;
+      const apptType = this.serviceType === 'GROWTH' ? 'PRIVATE_GROWTH' : 'PRIVATE_MENTAL';
+      const payload = {
+        appointment_type: apptType,
+        session_id: this.selectedSessionId,
+        date: this.selectedDate,
+        visit_type: this.visitType,
+        block_start: this.selectedBlockStart,
+        name: this.patient.name,
+        phone: this.patient.phone,
+        child_name: this.patient.childName || null,
+        date_of_birth: this.patient.dateOfBirth || null,
+        notes: this.patient.notes || null,
+      };
+      try {
+        const res = await fetch('/api/appointments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          this.errorMsg = data.detail || '預約失敗，請重試';
+        } else {
+          this.confirmation = data;
+          this.step = 5;
+        }
+      } catch {
+        this.errorMsg = '網路錯誤，請稍後再試';
+      } finally {
+        this.submitting = false;
+      }
+    },
+
+    /* ── Helpers ── */
+    blockSubtitle(block) {
+      if (this.visitType === 'FIRST') return '20 分鐘';
+      if (block.status === 'PARTIAL') {
+        const t = block.next_slot_return?.start || '';
+        return t ? `第2位（${t}起）` : '第2位複診';
+      }
+      return '10 分鐘';
+    },
+
+    formatDateLong(iso) {
+      if (!iso) return '';
+      const dt = new Date(iso + 'T00:00:00');
+      const days = ['日', '一', '二', '三', '四', '五', '六'];
+      return `${dt.getMonth() + 1} 月 ${dt.getDate()} 日（週${days[dt.getDay()]}）`;
+    },
+
+    reset() { Object.assign(this, bookingApp()); },
+  };
+}
+</script>
+{% endblock %}
