@@ -1,9 +1,11 @@
 from datetime import date, timedelta
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 from typing import Optional
 from database import get_db
-from models import Doctor, ClinicSession, Patient, Appointment
+from models import Doctor, ClinicSession, Patient, Appointment, ScheduleException
+import uuid
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -118,6 +120,71 @@ def get_schedule_summary(
 def list_all_doctors(db: Session = Depends(get_db)):
     doctors = db.query(Doctor).filter(Doctor.is_active == True).all()
     return [{"id": d.id, "name": d.name, "title": d.title} for d in doctors]
+
+
+# ── Schedule exceptions (leaves / day-off) ──────────────────────────────────
+
+class ExceptionRequest(BaseModel):
+    doctor_id: str
+    date: str                          # "2026-07-22"
+    session_start_time: Optional[str] = None  # None = whole day
+    reason: Optional[str] = None
+
+
+@router.get("/exceptions")
+def list_exceptions(
+    target_date: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    q = db.query(ScheduleException)
+    if target_date:
+        q = q.filter(ScheduleException.date == target_date)
+    excs = q.order_by(ScheduleException.date, ScheduleException.doctor_id).all()
+    result = []
+    for e in excs:
+        doctor = db.query(Doctor).filter(Doctor.id == e.doctor_id).first()
+        result.append({
+            "id": e.id,
+            "doctor_id": e.doctor_id,
+            "doctor_name": doctor.name if doctor else "",
+            "date": e.date,
+            "session_start_time": e.session_start_time,
+            "reason": e.reason,
+        })
+    return result
+
+
+@router.post("/exceptions")
+def create_exception(req: ExceptionRequest, db: Session = Depends(get_db)):
+    # Prevent duplicates
+    existing = db.query(ScheduleException).filter(
+        ScheduleException.doctor_id == req.doctor_id,
+        ScheduleException.date == req.date,
+        ScheduleException.session_start_time == req.session_start_time,
+    ).first()
+    if existing:
+        return {"id": existing.id, "message": "已存在"}
+
+    exc = ScheduleException(
+        id=str(uuid.uuid4()),
+        doctor_id=req.doctor_id,
+        date=req.date,
+        session_start_time=req.session_start_time,
+        reason=req.reason,
+    )
+    db.add(exc)
+    db.commit()
+    return {"id": exc.id, "message": "已設定休診"}
+
+
+@router.delete("/exceptions/{exc_id}")
+def delete_exception(exc_id: str, db: Session = Depends(get_db)):
+    exc = db.query(ScheduleException).filter(ScheduleException.id == exc_id).first()
+    if not exc:
+        raise HTTPException(404, "記錄不存在")
+    db.delete(exc)
+    db.commit()
+    return {"message": "已取消休診"}
 
 
 @router.put("/appointments/{appt_id}/status")

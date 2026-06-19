@@ -28,6 +28,10 @@
               :class="view === 'list' ? 'bg-teal-700 font-semibold' : ''">
         📋 掛號列表
       </button>
+      <button @click="view = 'schedule-mgmt'; loadExceptions()" class="w-full text-left px-3 py-2 rounded-lg hover:bg-teal-700 transition-colors"
+              :class="view === 'schedule-mgmt' ? 'bg-teal-700 font-semibold' : ''">
+        🗓️ 排班管理
+      </button>
     </nav>
     <div class="p-4 border-t border-teal-700 text-xs text-teal-400">
       <a href="/" class="hover:text-white">← 返回診所首頁</a>
@@ -40,7 +44,7 @@
     <!-- Top bar -->
     <header class="bg-white shadow-sm px-6 py-4 flex items-center gap-4 flex-wrap">
       <h1 class="text-lg font-bold text-gray-700 mr-auto"
-          x-text="view === 'schedule' ? '今日排診一覽' : '掛號列表'"></h1>
+          x-text="view === 'schedule' ? '今日排診一覽' : view === 'list' ? '掛號列表' : '排班管理'"></h1>
 
       <!-- Date picker -->
       <div class="flex items-center gap-2">
@@ -208,6 +212,88 @@
       </div>
     </div>
 
+    <!-- ══════════ SCHEDULE MANAGEMENT VIEW ══════════ -->
+    <div x-show="!loading && view === 'schedule-mgmt'" class="p-6 max-w-2xl space-y-6">
+
+      <!-- Add exception form -->
+      <div class="bg-white rounded-2xl shadow-sm p-5">
+        <h2 class="font-bold text-gray-700 mb-4">設定醫師休診</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">醫師</label>
+            <select x-model="excForm.doctor_id"
+                    class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+              <option value="">選擇醫師</option>
+              <template x-for="d in doctors" :key="d.id">
+                <option :value="d.id" x-text="d.name"></option>
+              </template>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">日期</label>
+            <input type="date" x-model="excForm.date"
+                   class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">時段（留空 = 整天）</label>
+            <select x-model="excForm.session_start_time"
+                    class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+              <option value="">整天休診</option>
+              <option value="08:30">早診 08:30</option>
+              <option value="14:00">午診 14:00</option>
+              <option value="18:00">晚診 18:00</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">原因（選填）</label>
+            <input type="text" x-model="excForm.reason" placeholder="請假、代診…"
+                   class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" />
+          </div>
+        </div>
+        <button @click="addException()"
+                :disabled="!excForm.doctor_id || !excForm.date"
+                class="px-5 py-2 bg-teal-600 text-white rounded-xl text-sm font-medium hover:bg-teal-700 transition-colors disabled:opacity-40">
+          設定休診
+        </button>
+        <span x-show="excMsg" class="ml-3 text-sm text-teal-700" x-text="excMsg"></span>
+      </div>
+
+      <!-- Exception list -->
+      <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+          <span class="font-semibold text-gray-700 text-sm">休診記錄</span>
+          <button @click="loadExceptions()" class="text-xs text-teal-600 hover:underline">重新整理</button>
+        </div>
+        <div x-show="exceptions.length === 0" class="px-5 py-8 text-center text-gray-400 text-sm">尚無休診記錄</div>
+        <table x-show="exceptions.length > 0" class="w-full text-sm">
+          <thead class="text-xs text-gray-400 border-b border-gray-100 bg-gray-50">
+            <tr>
+              <th class="text-left px-5 py-2 font-normal">醫師</th>
+              <th class="text-left px-3 py-2 font-normal">日期</th>
+              <th class="text-left px-3 py-2 font-normal">時段</th>
+              <th class="text-left px-3 py-2 font-normal">原因</th>
+              <th class="px-3 py-2"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-50">
+            <template x-for="e in exceptions" :key="e.id">
+              <tr class="hover:bg-gray-50">
+                <td class="px-5 py-3 font-medium" x-text="e.doctor_name"></td>
+                <td class="px-3 py-3" x-text="e.date"></td>
+                <td class="px-3 py-3 text-gray-500"
+                    x-text="e.session_start_time ? sessionLabel(e.session_start_time) : '整天'"></td>
+                <td class="px-3 py-3 text-gray-400 text-xs" x-text="e.reason || '—'"></td>
+                <td class="px-3 py-3">
+                  <button @click="removeException(e.id)"
+                          class="text-xs text-red-500 hover:text-red-700 hover:underline">取消</button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
   </div><!-- end main content -->
 </div><!-- end flex -->
 
@@ -227,6 +313,9 @@ function adminApp() {
     filterDoctor: '',
     filterStatus: '',
     detailAppt: null,
+    exceptions: [],
+    excForm: { doctor_id: '', date: new Date().toISOString().split('T')[0], session_start_time: '', reason: '' },
+    excMsg: '',
 
     async init() {
       await this.loadDoctors();
@@ -282,6 +371,40 @@ function adminApp() {
     today() {
       this.selectedDate = new Date().toISOString().split('T')[0];
       this.refresh();
+    },
+
+    async loadExceptions() {
+      const res = await fetch('/api/admin/exceptions');
+      this.exceptions = await res.json();
+    },
+
+    async addException() {
+      this.excMsg = '';
+      const body = {
+        doctor_id: this.excForm.doctor_id,
+        date: this.excForm.date,
+        session_start_time: this.excForm.session_start_time || null,
+        reason: this.excForm.reason || null,
+      };
+      const res = await fetch('/api/admin/exceptions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      this.excMsg = data.message;
+      await this.loadExceptions();
+      setTimeout(() => this.excMsg = '', 3000);
+    },
+
+    async removeException(id) {
+      await fetch(`/api/admin/exceptions/${id}`, { method: 'DELETE' });
+      await this.loadExceptions();
+    },
+
+    sessionLabel(t) {
+      const h = parseInt(t.split(':')[0]);
+      return h < 12 ? '早診' : h < 17 ? '午診' : '晚診';
     },
 
     showDetail(a) {

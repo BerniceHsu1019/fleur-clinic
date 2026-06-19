@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional
 from database import get_db
-from models import Doctor, ClinicSession, Appointment
+from models import Doctor, ClinicSession, Appointment, ScheduleException
 from lib.slot_generator import (
     get_available_dates,
     get_session_blocks,
@@ -63,7 +63,15 @@ def get_available_dates_for_doctor(
         .all()
     )
 
-    return get_available_dates(sessions, existing, visit_type, days_ahead=90)
+    dates = get_available_dates(sessions, existing, visit_type, days_ahead=90)
+
+    # Remove dates blocked by ScheduleException (all-day exceptions for this doctor)
+    exceptions = db.query(ScheduleException).filter(
+        ScheduleException.doctor_id == doctor_id,
+        ScheduleException.session_start_time.is_(None),
+    ).all()
+    blocked = {e.date for e in exceptions}
+    return [d for d in dates if d["date"] not in blocked]
 
 
 @router.get("/day-blocks")
@@ -96,8 +104,26 @@ def get_day_blocks(
         .all()
     )
 
+    # Check all-day exception
+    all_day_exc = db.query(ScheduleException).filter(
+        ScheduleException.doctor_id == doctor_id,
+        ScheduleException.date == date,
+        ScheduleException.session_start_time.is_(None),
+    ).first()
+    if all_day_exc:
+        return []
+
     result = []
     for session in sessions:
+        # Check session-specific exception
+        session_exc = db.query(ScheduleException).filter(
+            ScheduleException.doctor_id == doctor_id,
+            ScheduleException.date == date,
+            ScheduleException.session_start_time == session.start_time,
+        ).first()
+        if session_exc:
+            continue
+
         existing = (
             db.query(Appointment)
             .filter(
@@ -108,7 +134,6 @@ def get_day_blocks(
             .all()
         )
         blocks = get_session_blocks(session.start_time, session.end_time, existing)
-        # Keep only blocks relevant to the requested visit_type
         visible_blocks = [
             b for b in blocks
             if (visit_type == "FIRST" and b["available_for_first"])

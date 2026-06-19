@@ -83,6 +83,20 @@ class Patient(Base):
     appointments = relationship("Appointment", back_populates="patient")
 
 
+class ScheduleException(Base):
+    """Marks a doctor as unavailable on a specific date (all sessions or one session)."""
+    __tablename__ = "schedule_exceptions"
+
+    id = Column(String, primary_key=True, default=gen_id)
+    doctor_id = Column(String, ForeignKey("doctors.id"), nullable=False)
+    date = Column(String, nullable=False)              # "2026-07-22"
+    session_start_time = Column(String, nullable=True) # None = whole day; "14:00" = that session only
+    reason = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    doctor = relationship("Doctor")
+
+
 class Appointment(Base):
     __tablename__ = "appointments"
 
